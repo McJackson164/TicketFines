@@ -342,7 +342,7 @@ namespace Oxide.Plugins
             if (ticket.IsClosed) return false;
             if (ticket.ReceiverID != player.Id) return false;
 
-            if (!config.EnableFines || Economics.Call<bool>("Withdraw", player.Id, ticket.Fine))
+            if (!config.EnableFines || (Economics != null && Economics.Call<bool>("Withdraw", player.Id, ticket.Fine)))
             {
                 if (!CloseTicket(ticket, "PAID")) return false;
                 Interface.CallHook("OnTicketPaid", player.Id, ticket.TicketID, ticket.Fine);
