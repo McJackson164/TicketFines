@@ -95,7 +95,7 @@ namespace Oxide.Plugins
                         return;
                     }
 
-                    var tickets = GetUnpaidTickets(listTarget);
+                    var tickets = GetUnpaidTickets(listTarget, 10);
                     if (tickets == null) return;
 
                     iplayer.Message(lang.GetMessage("CmdTicket_List_Header", this, iplayer.Id));
