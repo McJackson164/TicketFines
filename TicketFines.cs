@@ -5,7 +5,6 @@ using Oxide.Core.Plugins;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEngine;
 
 namespace Oxide.Plugins
 {
@@ -488,9 +487,13 @@ namespace Oxide.Plugins
             return null;
         }
 
-        private float GenericDistance(GenericPosition a, GenericPosition b) => Vector3.Distance(GenericPositionToVector3(a), GenericPositionToVector3(b));
-
-        private Vector3 GenericPositionToVector3(GenericPosition genericPosition) => new Vector3(genericPosition.X, genericPosition.Y, genericPosition.Z);
+        private float GenericDistance(GenericPosition a, GenericPosition b)
+        {
+            float x = a.X - b.X;
+            float y = a.Y - b.Y;
+            float z = a.Z - b.Z;
+            return (float)Math.Sqrt(x * x + y * y + z * z);
+        }
 
         #endregion Helper
 
