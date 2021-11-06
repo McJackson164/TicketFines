@@ -5,11 +5,10 @@ using Oxide.Core.Plugins;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Ticket Fines", "McJackson164", "1.0.0")]
+    [Info("Ticket Fines", "McJackson164", "1.1.0")]
     [Description("A police-like system to issue tickets and impose fines.")]
     internal sealed class TicketFines : CovalencePlugin
     {
@@ -23,10 +22,15 @@ namespace Oxide.Plugins
         [PluginReference]
         private Plugin Economics;
 
+        [PluginReference]
+        private Plugin ServerRewards;
+
         private StoredData storedData;
         private Configuration config;
 
         private Dictionary<Ticket, string> demandedTickets = new Dictionary<Ticket, string>();
+
+        private string currency = "";
 
         #endregion Fields
 
@@ -51,6 +55,37 @@ namespace Oxide.Plugins
 
         private void Loaded()
         {
+            if (config.EnableFines)
+            {
+                if (!(config.UseEconomics ^ config.UseServerRewards ^ config.UseCustomCurrency))
+                {
+                    throw new ArgumentException("You can only use either Economics, Server Rewards or a custom currency to pay fines! Please adjust the configuration!");
+                }
+                else if (config.UseCustomCurrency)
+                {
+                    if (string.IsNullOrEmpty(config.CustomCurrencyItem))
+                    {
+                        throw new ArgumentException("You have to set a custom currency item in the configuration!");
+                    }
+
+                    var itemDefinition = ItemManager.FindItemDefinition(config.CustomCurrencyItem);
+                    if (!itemDefinition)
+                    {
+                        throw new ArgumentException("The custom currency item does not exist! Please change the custom currency item in the configuration!");
+                    }
+
+                    currency = itemDefinition.displayName.translated;
+                }
+                else if (config.UseServerRewards)
+                {
+#if !RUST
+                    throw new NotSupportedException("You can not use a Rust plugin in another game. Please set 'Use Server Rewards' to false in the configuration of this plugin.");
+#endif
+                    currency = "Point(s)";
+                }
+                else if (config.UseEconomics) currency = config.FineCurrency;
+            }
+
             if (Economics == null)
             {
                 Puts("Economics not found!");
@@ -95,13 +130,13 @@ namespace Oxide.Plugins
                         return;
                     }
 
-                    var tickets = GetUnpaidTickets(listTarget);
+                    var tickets = GetUnpaidTickets(listTarget, 10);
                     if (tickets == null) return;
 
                     iplayer.Message(lang.GetMessage("CmdTicket_List_Header", this, iplayer.Id));
                     foreach (var unpaidTicket in tickets)
                     {
-                        iplayer.Message(GetMessageFormatted("CmdTicket_List_Entry", iplayer, unpaidTicket.TicketID, unpaidTicket.Fine, config.FineCurrency, unpaidTicket.Note));
+                        iplayer.Message(GetMessageFormatted("CmdTicket_List_Entry", iplayer, unpaidTicket.TicketID, unpaidTicket.Fine, currency, unpaidTicket.Note));
                     }
                     iplayer.Message(lang.GetMessage("CmdTicket_List_UsagePay", this, iplayer.Id));
 
@@ -211,7 +246,7 @@ namespace Oxide.Plugins
                         return;
                     }
 
-                    demandedPlayer.Message(GetMessageFormatted("CmdTicket_Demand_TargetNotification", iplayer, iplayer.Name, demandedTicket.TicketID, demandedTicket.Fine, config.FineCurrency));
+                    demandedPlayer.Message(GetMessageFormatted("CmdTicket_Demand_TargetNotification", iplayer, iplayer.Name, demandedTicket.TicketID, demandedTicket.Fine, currency));
                     demandedPlayer.Message(GetMessageFormatted("CmdTicket_Demand_TargetUsage", iplayer, demandedTicket.TicketID));
                     iplayer.Message(GetMessageFormatted("CmdTicket_Demand_Success", iplayer, demandedTicket.TicketID, demandedPlayer.Name));
 
@@ -342,14 +377,36 @@ namespace Oxide.Plugins
             if (ticket.IsClosed) return false;
             if (ticket.ReceiverID != player.Id) return false;
 
-            if (!config.EnableFines || (Economics != null && Economics.Call<bool>("Withdraw", player.Id, ticket.Fine)))
+            if (config.EnableFines)
             {
-                if (!CloseTicket(ticket, "PAID")) return false;
-                Interface.CallHook("OnTicketPaid", player.Id, ticket.TicketID, ticket.Fine);
-                return true;
+                if (config.UseEconomics && Economics != null)
+                {
+                    if (!Economics.Call<bool>("Withdraw", player.Id, ticket.Fine)) return false;
+                }
+                else if (config.UseServerRewards && ServerRewards != null)
+                {
+                    var serverRewardsResponse = ServerRewards.Call<object>("TakePoints", player.Id, Convert.ToInt32(ticket.Fine));
+                    if (serverRewardsResponse == null) return false;
+                }
+                else
+            {
+#if RUST
+                    var rustPlayer = player.Object as BasePlayer;
+                    var itemDefinition = ItemManager.FindItemDefinition(config.CustomCurrencyItem);
+                    if (!itemDefinition) return false;
+                    if (rustPlayer.inventory.GetAmount(itemDefinition.itemid) < ticket.Fine) return false;
+                    rustPlayer.inventory.Take(null, itemDefinition.itemid, Convert.ToInt32(ticket.Fine));
+#elif HURTWORLD
+                    // TODO: implement
+#else
+                    return false;
+#endif
+                }
             }
 
-            return false;
+            CloseTicket(ticket, "PAID");
+                Interface.CallHook("OnTicketPaid", player.Id, ticket.TicketID, ticket.Fine);
+                return true;
         }
 
         private bool CloseTicket(Ticket ticket, string closedBy = null)
@@ -488,9 +545,13 @@ namespace Oxide.Plugins
             return null;
         }
 
-        private float GenericDistance(GenericPosition a, GenericPosition b) => Vector3.Distance(GenericPositionToVector3(a), GenericPositionToVector3(b));
-
-        private Vector3 GenericPositionToVector3(GenericPosition genericPosition) => new Vector3(genericPosition.X, genericPosition.Y, genericPosition.Z);
+        private float GenericDistance(GenericPosition a, GenericPosition b)
+        {
+            float x = a.X - b.X;
+            float y = a.Y - b.Y;
+            float z = a.Z - b.Z;
+            return (float)Math.Sqrt(x * x + y * y + z * z);
+        }
 
         #endregion Helper
 
@@ -498,8 +559,20 @@ namespace Oxide.Plugins
 
         private class Configuration
         {
-            [JsonProperty("Enable fines (requires Economics)")]
+            [JsonProperty("Enable fines (requires Economics OR Server Rewards OR custom currency item)")]
             public bool EnableFines = true;
+
+            [JsonProperty("Use 'Economics' plugin for payment (requires Economics)")]
+            public bool UseEconomics = false;
+
+            [JsonProperty("Use 'Server Rewards' plugin for payment (requires Server Rewards)")]
+            public bool UseServerRewards = false;
+
+            [JsonProperty("Use custom currency for payment")]
+            public bool UseCustomCurrency = true;
+
+            [JsonProperty("Custom Currency Item (requires 'Use custom currency' to be true. Use item shortname)")]
+            public string CustomCurrencyItem = "scrap";
 
             [JsonProperty("Enable automatic withdraw of fines (requires 'Enable fines' to be true)")]
             public bool AutoWithdraw = false;
@@ -507,7 +580,7 @@ namespace Oxide.Plugins
             [JsonProperty("Maximum fine per ticket (default 1000.0)")]
             public double MaxFine = 1000.0d;
 
-            [JsonProperty("Currency (e.g. €, $, Euro)")]
+            [JsonProperty("Currency (requires 'Use custom currency' to be true)")]
             public string FineCurrency = "$";
 
             [JsonProperty("Enable notes (descriptive note attached to a ticket)")]
