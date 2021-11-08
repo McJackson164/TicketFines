@@ -345,6 +345,17 @@ namespace Oxide.Plugins
                 storedData.Tickets.Add(target.Id, new List<Ticket>() { ticket });
             }
 
+            var issuerPlayer = players.FindPlayer(ticket.IssuerID);
+            var issuerName = issuerPlayer != null ? issuerPlayer.Name : ticket.IssuerID;
+            if (config.EnableNotes && !string.IsNullOrEmpty(note))
+            {
+                target.Message(GetMessageFormatted("Method_IssueTicket_TargetNotificationWithNote", target, ticket.Fine, currency, issuerName, ticket.Note));
+            }
+            else
+            {
+                target.Message(GetMessageFormatted("Method_IssueTicket_TargetNotification", target, ticket.Fine, currency, issuerName));
+            }
+
             Interface.CallHook("OnTicketIssued", ticket.TicketID, ticket.IssuerID, ticket.ReceiverID, ticket.Fine, ticket.Note);
 
             if (config.EnableFines && config.AutoWithdraw)
@@ -389,7 +400,7 @@ namespace Oxide.Plugins
                     if (serverRewardsResponse == null) return false;
                 }
                 else
-            {
+                {
 #if RUST
                     var rustPlayer = player.Object as BasePlayer;
                     var itemDefinition = ItemManager.FindItemDefinition(config.CustomCurrencyItem);
@@ -405,8 +416,8 @@ namespace Oxide.Plugins
             }
 
             CloseTicket(ticket, "PAID");
-                Interface.CallHook("OnTicketPaid", player.Id, ticket.TicketID, ticket.Fine);
-                return true;
+            Interface.CallHook("OnTicketPaid", player.Id, ticket.TicketID, ticket.Fine);
+            return true;
         }
 
         private bool CloseTicket(Ticket ticket, string closedBy = null)
@@ -725,6 +736,8 @@ namespace Oxide.Plugins
                 ["CmdTicket_Edit_Failure"] = "Failed to edit ticket with id '{0}'!",
 
                 // METHODS
+                ["Method_IssueTicket_TargetNotificationWithNote"] = "You received a ticket with a fine of {0} {1}, issued by {2}! Note: {3}",
+                ["Method_IssueTicket_TargetNotification"] = "You received a ticket with a fine of {0} {1}, issued by {2}!",
                 ["Method_IssueTicket_AutoWithdraw_Success"] = "Automatic withdraw was successful!",
                 ["Method_IssueTicket_AutoWithdraw_Failure"] = "Automatic withdraw was not successful! Please pay your ticket manually!",
 
