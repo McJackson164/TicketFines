@@ -352,7 +352,7 @@ namespace Oxide.Plugins
             {
                 var item = ItemManager.CreateByName("note");
                 item.name = "Ticket";
-                item.text = $"TICKET\n----------------------------------\nID:\t\t\t\t{ticket.TicketID}\nIssued by:\t{issuerName}\nFine:\t\t\t{ticket.Fine} {currency}{string.IsNullOrEmpty(note) ? "" : $"\nNote:\t\t\t{ticket.Note}"}";
+                item.text = $"TICKET\n----------------------------------\nID:\t\t\t\t{ticket.TicketID}\nIssued by:\t{issuerName}\nFine:\t\t\t{ticket.Fine} {currency}" + (string.IsNullOrEmpty(note) ? "" : $"\nNote:\t\t\t{ticket.Note}");
                 (target.Object as BasePlayer).inventory.GiveItem(item);
             }
 #endif
