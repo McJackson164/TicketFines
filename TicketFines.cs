@@ -8,7 +8,7 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("Ticket Fines", "McJackson164", "1.1.1")]
+    [Info("Ticket Fines", "McJackson164", "1.1.2")]
     [Description("A police-like system to issue tickets and impose fines.")]
     internal sealed class TicketFines : CovalencePlugin
     {
@@ -347,7 +347,17 @@ namespace Oxide.Plugins
 
             var issuerPlayer = players.FindPlayer(ticket.IssuerID);
             var issuerName = issuerPlayer != null ? issuerPlayer.Name : ticket.IssuerID;
+#if RUST
             if (config.EnableNotes && !string.IsNullOrEmpty(note))
+            {
+                var item = ItemManager.CreateByName("note");
+                item.name = "Ticket";
+                item.text = $"TICKET\n----------------------------------\nID:\t\t\t\t{ticket.TicketID}\nIssued by:\t{issuerName}\nFine:\t\t\t{ticket.Fine} {currency}{string.IsNullOrEmpty(note) ? "" : $"\nNote:\t\t\t{ticket.Note}"}";
+                (target.Object as BasePlayer).inventory.GiveItem(item);
+            }
+#endif
+
+            if (!string.IsNullOrEmpty(note))
             {
                 target.Message(GetMessageFormatted("Method_IssueTicket_TargetNotificationWithNote", target, ticket.Fine, currency, issuerName, ticket.Note));
             }
@@ -409,6 +419,7 @@ namespace Oxide.Plugins
                     rustPlayer.inventory.Take(null, itemDefinition.itemid, Convert.ToInt32(ticket.Fine));
 #elif HURTWORLD
                     // TODO: implement
+                    return false;
 #else
                     return false;
 #endif
