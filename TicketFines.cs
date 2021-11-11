@@ -347,23 +347,27 @@ namespace Oxide.Plugins
 
             var issuerPlayer = players.FindPlayer(ticket.IssuerID);
             var issuerName = issuerPlayer != null ? issuerPlayer.Name : ticket.IssuerID;
+            
 #if RUST
-            if (config.EnableNotes && !string.IsNullOrEmpty(note))
+            var rustPlayer = target.Object as BasePlayer;
+            if (config.EnableNotes && !string.IsNullOrEmpty(note) && rustPlayer && rustPlayer.IsAlive())
             {
                 var item = ItemManager.CreateByName("note");
                 item.name = "Ticket";
                 item.text = $"TICKET\n----------------------------------\nID:\t\t\t\t{ticket.TicketID}\nIssued by:\t{issuerName}\nFine:\t\t\t{ticket.Fine} {currency}" + (string.IsNullOrEmpty(note) ? "" : $"\nNote:\t\t\t{ticket.Note}");
-                (target.Object as BasePlayer).inventory.GiveItem(item);
+                rustPlayer?.inventory.GiveItem(item);
             }
 #endif
-
-            if (!string.IsNullOrEmpty(note))
+            if (target.IsConnected)
             {
-                target.Message(GetMessageFormatted("Method_IssueTicket_TargetNotificationWithNote", target, ticket.Fine, currency, issuerName, ticket.Note));
-            }
-            else
-            {
-                target.Message(GetMessageFormatted("Method_IssueTicket_TargetNotification", target, ticket.Fine, currency, issuerName));
+                if (!string.IsNullOrEmpty(note))
+                {
+                    target.Message(GetMessageFormatted("Method_IssueTicket_TargetNotificationWithNote", target, ticket.Fine, currency, issuerName, ticket.Note));
+                }
+                else
+                {
+                    target.Message(GetMessageFormatted("Method_IssueTicket_TargetNotification", target, ticket.Fine, currency, issuerName));
+                }
             }
 
             Interface.CallHook("OnTicketIssued", ticket.TicketID, ticket.IssuerID, ticket.ReceiverID, ticket.Fine, ticket.Note);
