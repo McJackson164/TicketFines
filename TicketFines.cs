@@ -402,16 +402,29 @@ namespace Oxide.Plugins
             if (ticket.IsClosed) return false;
             if (ticket.ReceiverID != player.Id) return false;
 
-            if (config.EnableFines)
+            var target = demandedTickets.ContainsKey(ticket) ? demandedTickets[ticket] : ticket.IssuerID;
+
+            if (config.EnableFines && ticket.Fine > 0)
             {
                 if (config.UseEconomics && Economics != null)
                 {
-                    if (!Economics.Call<bool>("Withdraw", player.Id, ticket.Fine)) return false;
+                    if (config.DemandantReceiveFine)
+                    {
+                        if (!Economics.Call<bool>("Transfer", player.Id, target, ticket.Fine)) return false;
+                    }
+                    else
+                    {
+                        if (!Economics.Call<bool>("Withdraw", player.Id, ticket.Fine)) return false;
+                    }
                 }
                 else if (config.UseServerRewards && ServerRewards != null)
                 {
                     var serverRewardsResponse = ServerRewards.Call<object>("TakePoints", player.Id, Convert.ToInt32(ticket.Fine));
                     if (serverRewardsResponse == null) return false;
+                    if (config.DemandantReceiveFine)
+                    {
+                        ServerRewards.Call<object>("AddPoints", target, Convert.ToInt32(ticket.Fine));
+                    }
                 }
                 else
                 {
@@ -421,6 +434,14 @@ namespace Oxide.Plugins
                     if (!itemDefinition) return false;
                     if (rustPlayer.inventory.GetAmount(itemDefinition.itemid) < ticket.Fine) return false;
                     rustPlayer.inventory.Take(null, itemDefinition.itemid, Convert.ToInt32(ticket.Fine));
+                    if (config.DemandantReceiveFine)
+                    {
+                        var rustTargetPlayer = BasePlayer.Find(target);
+                        if (rustTargetPlayer)
+                        {
+                            rustTargetPlayer.inventory.GiveItem(ItemManager.Create(itemDefinition, Convert.ToInt32(ticket.Fine)));
+                        }
+                    }
 #elif HURTWORLD
                     // TODO: implement
                     return false;
@@ -603,11 +624,14 @@ namespace Oxide.Plugins
             [JsonProperty("Enable automatic withdraw of fines (requires 'Enable fines' to be true)")]
             public bool AutoWithdraw = false;
 
+            [JsonProperty("The demandent will receive a paid fine. (if false, the fine amount will be deleted)")]
+            public bool DemandantReceiveFine = true;
+
             [JsonProperty("Maximum fine per ticket (default 1000.0)")]
             public double MaxFine = 1000.0d;
 
             [JsonProperty("Currency (requires 'Use custom currency' to be true)")]
-            public string FineCurrency = "$";
+            public string FineCurrency = "Scrap";
 
             [JsonProperty("Enable notes (descriptive note attached to a ticket)")]
             public bool EnableNotes = true;
