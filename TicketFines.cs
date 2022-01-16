@@ -8,7 +8,7 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("Ticket Fines", "McJackson164", "1.1.2")]
+    [Info("Ticket Fines", "McJackson164", "1.1.3")]
     [Description("A police-like system to issue tickets and impose fines.")]
     internal sealed class TicketFines : CovalencePlugin
     {
