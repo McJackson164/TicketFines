@@ -57,7 +57,7 @@ namespace Oxide.Plugins
         {
             if (config.EnableFines)
             {
-                if (!(config.UseEconomics ^ config.UseServerRewards ^ config.UseCustomCurrency))
+                if (new[] { config.UseEconomics, config.UseServerRewards, config.UseCustomCurrency }.Count(boolean => boolean) > 1)
                 {
                     throw new ArgumentException("You can only use either Economics, Server Rewards or a custom currency to pay fines! Please adjust the configuration!");
                 }
