@@ -8,7 +8,7 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("Ticket Fines", "McJackson164", "1.1.3")]
+    [Info("Ticket Fines", "McJackson164", "1.1.4")]
     [Description("A police-like system to issue tickets and impose fines.")]
     internal sealed class TicketFines : CovalencePlugin
     {
@@ -136,7 +136,7 @@ namespace Oxide.Plugins
                     iplayer.Message(lang.GetMessage("CmdTicket_List_Header", this, iplayer.Id));
                     foreach (var unpaidTicket in tickets)
                     {
-                        iplayer.Message(GetMessageFormatted("CmdTicket_List_Entry", iplayer, unpaidTicket.TicketID, unpaidTicket.Fine, currency, unpaidTicket.Note));
+                        iplayer.Message(GetMessageFormatted("CmdTicket_List_Entry", iplayer, unpaidTicket.TicketID, $"{unpaidTicket.IssueDate.Month}/{unpaidTicket.IssueDate.Day}", unpaidTicket.Fine, currency, unpaidTicket.Note));
                     }
                     iplayer.Message(lang.GetMessage("CmdTicket_List_UsagePay", this, iplayer.Id));
 
@@ -347,14 +347,15 @@ namespace Oxide.Plugins
 
             var issuerPlayer = players.FindPlayer(ticket.IssuerID);
             var issuerName = issuerPlayer != null ? issuerPlayer.Name : ticket.IssuerID;
-            
+
 #if RUST
             var rustPlayer = target.Object as BasePlayer;
-            if (config.EnableNotes && !string.IsNullOrEmpty(note) && rustPlayer && rustPlayer.IsAlive())
+            if (config.EnableNotes && rustPlayer && rustPlayer.IsAlive())
             {
                 var item = ItemManager.CreateByName("note");
                 item.name = "Ticket";
-                item.text = $"TICKET\n----------------------------------\nID:\t\t\t\t{ticket.TicketID}\nIssued by:\t{issuerName}\nFine:\t\t\t{ticket.Fine} {currency}" + (string.IsNullOrEmpty(note) ? "" : $"\nNote:\t\t\t{ticket.Note}");
+                item.skin = 2640270407;
+                item.text = $"TICKET\n----------------------------------\nID:\t\t\t\t{ticket.TicketID}\nIssued at:\t{ticket.IssueDate}\nIssued by:\t{issuerName}\nFine:\t\t\t{ticket.Fine} {currency}" + (string.IsNullOrEmpty(note) ? "" : $"\nNote:\t\t\t{ticket.Note}");
                 rustPlayer?.inventory.GiveItem(item);
             }
 #endif
@@ -461,6 +462,7 @@ namespace Oxide.Plugins
             if (ticket.IsClosed) return false;
             ticket.IsClosed = true;
             ticket.ClosedBy = closedBy;
+            ticket.CloseDate = DateTime.Now;
             Interface.CallHook("OnTicketClosed", ticket.TicketID, ticket.ReceiverID, ticket.ClosedBy);
             return true;
         }
@@ -706,18 +708,24 @@ namespace Oxide.Plugins
             public string Note { get; set; }
             public bool IsClosed { get; set; }
             public string ClosedBy { get; set; }
+            public DateTime IssueDate { get; set; }
+            public DateTime CloseDate { get; set; }
 
             [JsonConstructor]
-            public Ticket(uint ticketID, string issuerID, string receiverID, double fine, string note = null)
+            public Ticket(uint ticketID, string issuerID, string receiverID, double fine, DateTime issueDate, string note = null, bool isClosed = false, string closedBy = null, DateTime? closeDate = null)
             {
                 TicketID = ticketID;
                 IssuerID = issuerID;
                 ReceiverID = receiverID;
                 Fine = fine;
+                IssueDate = issueDate;
                 Note = note;
+                IsClosed = isClosed;
+                ClosedBy = closedBy;
+                if (closeDate != null) CloseDate = (DateTime) closeDate;
             }
 
-            public Ticket(string issuerID, string receiverID, double fine, string note = null) : this(++CurrentID, issuerID, receiverID, fine, note)
+            public Ticket(string issuerID, string receiverID, double fine, string note = null) : this(++CurrentID, issuerID, receiverID, fine, DateTime.Now, note)
             {
             }
 
@@ -743,8 +751,8 @@ namespace Oxide.Plugins
             lang.RegisterMessages(new Dictionary<string, string>
             {
                 // COMMANDS
-                ["CmdTicket_List_Header"] = "ID\tFine\t\tNote\n-------------------------------------------------------",
-                ["CmdTicket_List_Entry"] = "{0}:\t{1} {2}\t{3}",
+                ["CmdTicket_List_Header"] = "ID\tDate\t\tFine\t\t\tNote\n--------------------------------------------------------------",
+                ["CmdTicket_List_Entry"] = "{0}:\t{1}\t\t{2} {3}\t\t{4}",
                 ["CmdTicket_List_UsagePay"] = "Use '/fine pay <ID>' to pay the fine of a ticket.",
 
                 ["CmdTicket_Pay_Usage"] = "Usage: /fine pay <ticketID>",
